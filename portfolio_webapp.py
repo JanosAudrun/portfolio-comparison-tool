@@ -319,6 +319,12 @@ if st.sidebar.button("Send it.", key="calculate_button"):
     data1 = fetch_data(tickers1, start_date, end_date, frequency)
     data2 = fetch_data(tickers2, start_date, end_date, frequency)
 
+    # Combine all unique tickers from both portfolios
+    all_tickers = sorted(set(data1.columns).union(set(data2.columns)))
+
+    # Generate a color map for all tickers
+    color_map = {ticker: plt.cm.tab10(i % 10) for i, ticker in enumerate(all_tickers)}
+
     if data1 is not None and data2 is not None:
         # Step 2: Validate weights for each portfolio
         weights1 = validate_weights(weights1, len(data1.columns))  # Portfolio 1
@@ -366,15 +372,15 @@ if st.sidebar.button("Send it.", key="calculate_button"):
             col1, col2 = st.columns(2)
 
             with col1:
-                st.write("## Portfolio 1")
+                st.write("#### Portfolio 1")
                 st.pyplot(plot_allocation_pie(weights1, data1.columns, "Portfolio 1 Allocation"))
-                st.write("### Drawdown")
+                st.write("##### Drawdown")
                 st.pyplot(plot_drawdown(cumulative_returns1, "Portfolio 1"))
-                st.write("### Contributions")
+                st.write("##### Contributions")
                 st.pyplot(plot_ticker_contributions(data1, weights1))
-                st.write("### Cumulative Returns")
+                st.write("##### Cumulative Returns")
                 st.pyplot(plot_ticker_cumulative_returns(data1))
-                st.write("### Volatility")
+                st.write("##### Volatility")
                 st.write(f"**Portfolio Volatility**: {portfolio_volatility1 * 100:.2f}%")
                 vol_table1 = pd.DataFrame({
                     "Ticker": data1.columns,
@@ -383,15 +389,15 @@ if st.sidebar.button("Send it.", key="calculate_button"):
                 st.table(vol_table1)
 
             with col2:
-                st.write("## Portfolio 2")
+                st.write("#### Portfolio 2")
                 st.pyplot(plot_allocation_pie(weights2, data2.columns, "Portfolio 2 Allocation"))
-                st.write("### Drawdown")
+                st.write("##### Drawdown")
                 st.pyplot(plot_drawdown(cumulative_returns2, "Portfolio 2"))
-                st.write("### Contributions")
+                st.write("##### Contributions")
                 st.pyplot(plot_ticker_contributions(data2, weights2))
-                st.write("### Cumulative Returns")
+                st.write("##### Cumulative Returns")
                 st.pyplot(plot_ticker_cumulative_returns(data2))
-                st.write("### Volatility")
+                st.write("##### Volatility")
                 st.write(f"**Portfolio Volatility**: {portfolio_volatility2 * 100:.2f}%")
                 vol_table2 = pd.DataFrame({
                     "Ticker": data2.columns,
