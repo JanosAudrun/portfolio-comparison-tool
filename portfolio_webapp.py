@@ -93,9 +93,6 @@ def fetch_data(tickers, start_date, end_date, frequency):
 
         if isinstance(data, pd.Series):  # Single ticker case
             data = data.to_frame(name=tickers[0])
-
-        # Drop rows where any ticker has NaN values (align by common dates)
-        aligned_data = data.dropna()
     
         # Resample data based on frequency
         if frequency == "Weekly":
@@ -103,7 +100,10 @@ def fetch_data(tickers, start_date, end_date, frequency):
         elif frequency == "Monthly":
             data = data.resample('M').last()
         
-        return data
+        # Drop rows where any ticker has NaN values (align by common dates)
+        aligned_data = data.dropna()
+        
+        return aligned_data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
         return None
