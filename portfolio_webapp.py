@@ -34,8 +34,9 @@ with st.expander("Description and Instructions", expanded=True):
         st.markdown("""
         ### Instructions
         1. Enter tickers and weights for both portfolios in the sidebar.
-        2. Set a date range for analysis.
-        3. Hit **Send** to generate the results.
+        2. Choose data frequency: daily, weekly or monthly
+        3. Set a date range for analysis.
+        4. Hit **Send** to generate the results.
 
         #### Tips:
         - Expand each graph by hovering on it and clicking the expand button in the top right.
@@ -51,6 +52,13 @@ weights1 = st.sidebar.text_area("Weights (comma-separated, must sum to 100%)", v
 st.sidebar.subheader("Portfolio 2")
 tickers2 = st.sidebar.text_area("Tickers (comma-separated)", value="SPY,AGG,BTC-USD", key="tickers2")
 weights2 = st.sidebar.text_area("Weights (comma-separated, must sum to 100%)", value="58,40,2", key="weights2")
+
+# Sidebar for frequency selection
+frequency = st.sidebar.selectbox(
+    "Select Data Frequency",
+    options=["Daily", "Weekly", "Monthly"],
+    index=0  # Default to "Daily"
+)
 
 # Sidebar for date range selection
 st.sidebar.subheader("Date Range")
@@ -77,18 +85,23 @@ def validate_weights(weights, num_tickers):
         return None
 
 # Function to fetch data for multiple tickers and align by common dates
-def fetch_data(tickers, start_date, end_date):
+def fetch_data(tickers, start_date, end_date, frequency):
     tickers = [t.strip().upper() for t in tickers.split(",")]
     try:
         # Fetch data for all tickers at once
         data = yf.download(tickers, start=start_date, end=end_date)['Adj Close']
+        data = data.fillna(method="ffill").fillna(method="bfill")  # Handle missing data
+        
         if isinstance(data, pd.Series):  # Single ticker case
             data = data.to_frame(name=tickers[0])
         
-        # Drop rows where any ticker has NaN values (align by common dates)
-        aligned_data = data.dropna()
-
-        return aligned_data
+        # Resample data based on frequency
+        if frequency == "Weekly":
+            data = data.resample('W').last()
+        elif frequency == "Monthly":
+            data = data.resample('M').last()
+        
+        return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
         return None
@@ -234,8 +247,8 @@ def plot_drawdown(cumulative_returns, portfolio_name):
 # If Calculate is clicked
 if st.sidebar.button("Send it.", key="calculate_button"):
     # Step 1: Fetch data for the portfolios
-    data1 = fetch_data(tickers1, start_date, end_date)
-    data2 = fetch_data(tickers2, start_date, end_date)
+    data1 = fetch_data(tickers1, start_date, end_date, frequency)
+    data2 = fetch_data(tickers2, start_date, end_date, frequency)
 
     if data1 is not None and data2 is not None:
         # Step 2: Validate weights for each portfolio
@@ -264,7 +277,7 @@ if st.sidebar.button("Send it.", key="calculate_button"):
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
             ax.set_xlabel('Date', color='#FFFFFF', fontsize=16)
             ax.set_ylabel('Cumulative Return', color='#FFFFFF', fontsize=16)
-            ax.set_title(f'Cumulative Returns ({start_date} to {end_date})', color='#FFFFFF', fontsize=20)
+            ax.set_title(f'Cumulative Returns {frequency} Data, ({start_date} to {end_date})', color='#FFFFFF', fontsize=20)
             ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0))
             ax.tick_params(axis='both', colors='#FFFFFF', labelsize=14)
             ax.legend(facecolor='#212E31', edgecolor='#FFFFFF', framealpha=0.5, labelcolor='#FFFFFF', fontsize=14)
