@@ -157,20 +157,17 @@ def calculate_volatility(data, weights=None, frequency="Daily"):
     return ticker_volatility, portfolio_volatility
 
 # Function to plot individual ticker cumulative returns with distinct colors
-def plot_ticker_cumulative_returns(data):
+def plot_ticker_cumulative_returns(data, color_map):
     fig, ax = plt.subplots(figsize=(16, 10))  # Larger chart size
     fig.patch.set_facecolor('#212E31')  # Background around chart
     ax.set_facecolor('#212E31')  # Chart background
 
-    # Generate a color map with distinct colors for each ticker
-    color_map = cm.get_cmap('tab10', len(data.columns))
-
-    for idx, ticker in enumerate(data.columns):
+    for ticker in data.columns:
         cumulative_returns = (1 + data[ticker].pct_change().fillna(0)).cumprod() - 1
         ax.plot(data.index, cumulative_returns, 
                 label=f'{ticker} Cumulative Return', 
                 linestyle='-', 
-                color=color_map(idx))  # Use distinct color for each ticker
+                color=color_map[ticker])  # Use color from unified color_map
 
     ax.set_xlim(left=data.index.min())  # Ensure the first point starts at the Y axis
     ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=[1, 4, 7, 10]))  # Quarterly ticks
@@ -192,23 +189,20 @@ def plot_ticker_cumulative_returns(data):
     return fig
 
 # Function to plot individual ticker contributions to the portfolio
-def plot_ticker_contributions(data, weights):
+def plot_ticker_contributions(data, weights, color_map):
     fig, ax = plt.subplots(figsize=(16, 10))  # Larger chart size
     fig.patch.set_facecolor('#212E31')  # Background around chart
     ax.set_facecolor('#212E31')  # Chart background
 
-    # Generate a color map with distinct colors for each ticker
-    color_map = cm.get_cmap('tab10', len(data.columns))
-
-    for idx, ticker in enumerate(data.columns):
+    for ticker in data.columns:
         # Calculate weighted daily contributions
-        daily_contribution = data[ticker].pct_change().fillna(0) * weights[idx]
-        cumulative_contribution = (1 + daily_contribution).cumprod() - 1 # Cumulative contributions
+        daily_contribution = data[ticker].pct_change().fillna(0) * weights[data.columns.get_loc(ticker)]
+        cumulative_contribution = (1 + daily_contribution).cumprod() - 1  # Cumulative contributions
 
         ax.plot(data.index, cumulative_contribution, 
                 label=f'{ticker} Contribution', 
                 linestyle='-', 
-                color=color_map(idx))  # Use distinct color for each ticker
+                color=color_map[ticker])  # Use color from unified color_map
 
     ax.set_xlim(left=data.index.min())  # Ensure the first point starts at the Y axis
     ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=[1, 4, 7, 10]))  # Quarterly ticks
@@ -230,20 +224,24 @@ def plot_ticker_contributions(data, weights):
     return fig
 
 # Function to plot portfolio allocation piechart
-def plot_allocation_pie(weights, tickers, title):
+def plot_allocation_pie(weights, tickers, title, color_map):
     """
     Plots a pie chart for portfolio allocations with callout labels and percentages.
     :param weights: List of portfolio weights.
     :param tickers: List of portfolio tickers.
     :param title: Title for the pie chart.
+    :param color_map: Dictionary mapping tickers to colors.
     """
     fig, ax = plt.subplots(figsize=(8, 6))
     
-    wedges, _= ax.pie(
+    # Use the color map to set colors
+    colors = [color_map[ticker] for ticker in tickers]
+
+    wedges, _ = ax.pie(
         weights,
         labels=None,  # Disable default labels to customize
         startangle=90,
-        colors=plt.cm.tab10.colors[:len(tickers)],  # Use a color map for distinct colors
+        colors=colors,  # Use the unified color map
     )
 
     # Add callouts for labels and percentages
@@ -252,8 +250,8 @@ def plot_allocation_pie(weights, tickers, title):
         ang = (p.theta2 - p.theta1) / 2.0 + p.theta1
         x = np.cos(np.radians(ang))  # X-coordinate for callout
         y = np.sin(np.radians(ang))  # Y-coordinate for callout
-        
-        connectionstyle = "angle,angleA=0,angleB={}".format(ang)
+
+        connectionstyle = f"angle,angleA=0,angleB={ang}"
 
         # Annotate ticker labels
         ax.annotate(
@@ -373,13 +371,13 @@ if st.sidebar.button("Send it.", key="calculate_button"):
 
             with col1:
                 st.write("#### Portfolio 1")
-                st.pyplot(plot_allocation_pie(weights1, data1.columns, "Portfolio 1 Allocation"))
+                st.pyplot(plot_allocation_pie(weights1, data1.columns, "Portfolio 1 Allocation", color_map))
                 st.write("##### Drawdown")
                 st.pyplot(plot_drawdown(cumulative_returns1, "Portfolio 1"))
                 st.write("##### Contributions")
-                st.pyplot(plot_ticker_contributions(data1, weights1))
+                st.pyplot(plot_ticker_contributions(data1, weights1, color_map))
                 st.write("##### Cumulative Returns")
-                st.pyplot(plot_ticker_cumulative_returns(data1))
+                st.pyplot(plot_ticker_cumulative_returns(data1, color_map))
                 st.write("##### Volatility")
                 st.write(f"**Portfolio Volatility**: {portfolio_volatility1 * 100:.2f}%")
                 vol_table1 = pd.DataFrame({
@@ -390,13 +388,13 @@ if st.sidebar.button("Send it.", key="calculate_button"):
 
             with col2:
                 st.write("#### Portfolio 2")
-                st.pyplot(plot_allocation_pie(weights2, data2.columns, "Portfolio 2 Allocation"))
+                st.pyplot(plot_allocation_pie(weights2, data2.columns, "Portfolio 2 Allocation", color_map))
                 st.write("##### Drawdown")
                 st.pyplot(plot_drawdown(cumulative_returns2, "Portfolio 2"))
                 st.write("##### Contributions")
-                st.pyplot(plot_ticker_contributions(data2, weights2))
+                st.pyplot(plot_ticker_contributions(data2, weights2, color_map))
                 st.write("##### Cumulative Returns")
-                st.pyplot(plot_ticker_cumulative_returns(data2))
+                st.pyplot(plot_ticker_cumulative_returns(data2, color_map))
                 st.write("##### Volatility")
                 st.write(f"**Portfolio Volatility**: {portfolio_volatility2 * 100:.2f}%")
                 vol_table2 = pd.DataFrame({
