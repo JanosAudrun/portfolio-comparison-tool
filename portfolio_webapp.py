@@ -90,11 +90,13 @@ def fetch_data(tickers, start_date, end_date, frequency):
     try:
         # Fetch data for all tickers at once
         data = yf.download(tickers, start=start_date, end=end_date)['Adj Close']
-        data = data.fillna(method="ffill").fillna(method="bfill")  # Handle missing data
-        
+
         if isinstance(data, pd.Series):  # Single ticker case
             data = data.to_frame(name=tickers[0])
-        
+
+        # Drop rows where any ticker has NaN values (align by common dates)
+        aligned_data = data.dropna()
+    
         # Resample data based on frequency
         if frequency == "Weekly":
             data = data.resample('W').last()
@@ -125,18 +127,28 @@ def calculate_drawdown(cumulative_returns):
     drawdown = (cumulative_returns - peak) # Calculate drawdown
     return drawdown
 
-# Calculate volatility
-def calculate_volatility(data, weights=None):
-    # Daily returns for each ticker
-    daily_returns = data.pct_change().dropna()
+# Calculate volatility with dynamic frequency adjustment
+def calculate_volatility(data, weights=None, frequency="Daily"):
+    # Determine annualization factor
+    if frequency == "Daily":
+        annualization_factor = 252
+    elif frequency == "Weekly":
+        annualization_factor = 52
+    elif frequency == "Monthly":
+        annualization_factor = 12
+    else:
+        raise ValueError("Invalid frequency")
 
-    # Ticker volatilities
-    ticker_volatility = daily_returns.std() * (252 ** 0.5)
+    # Daily (or adjusted) returns for each ticker
+    returns = data.pct_change().dropna()
 
-    # Portfolio volatility (if weights are provided)
+    # Ticker volatilities (annualized)
+    ticker_volatility = returns.std() * (annualization_factor ** 0.5)
+
+    # Portfolio volatility (if weights are provided, annualized)
     portfolio_volatility = None
     if weights is not None:
-        portfolio_volatility = (daily_returns.dot(weights)).std()
+        portfolio_volatility = (returns.dot(weights)).std() * (annualization_factor ** 0.5)
 
     return ticker_volatility, portfolio_volatility
 
@@ -265,6 +277,10 @@ if st.sidebar.button("Send it.", key="calculate_button"):
             portfolio1_returns, cumulative_returns1 = calculate_portfolio(data1, weights1)
             portfolio2_returns, cumulative_returns2 = calculate_portfolio(data2, weights2)
 
+            # Calculate volatilities for Portfolio 1 and Portfolio 2
+            ticker_volatility1, portfolio_volatility1 = calculate_volatility(data1, weights1, frequency)
+            ticker_volatility2, portfolio_volatility2 = calculate_volatility(data2, weights2, frequency)
+
             # Step 5: Plot the main portfolio comparison graph
             st.write("### Portfolio Comparison")
             fig, ax = plt.subplots(figsize=(16, 8))  # Adjusted size for main chart
@@ -301,10 +317,10 @@ if st.sidebar.button("Send it.", key="calculate_button"):
                 st.write("### Cumulative Returns")
                 st.pyplot(plot_ticker_cumulative_returns(data1))
                 st.write("### Volatility")
-                st.write(f"**Portfolio Volatility**: {calculate_volatility(data1, weights1)[1] * 100:.2f}%")
+                st.write(f"**Portfolio Volatility**: {portfolio_volatility1 * 100:.2f}%")
                 vol_table1 = pd.DataFrame({
                     "Ticker": data1.columns,
-                    "Volatility (%)": calculate_volatility(data1)[0].values * 100
+                    "Annualized Volatility (%)": ticker_volatility1.values * 100
                 })
                 st.table(vol_table1)
 
@@ -317,10 +333,10 @@ if st.sidebar.button("Send it.", key="calculate_button"):
                 st.write("### Cumulative Returns")
                 st.pyplot(plot_ticker_cumulative_returns(data2))
                 st.write("### Volatility")
-                st.write(f"**Portfolio Volatility**: {calculate_volatility(data2, weights2)[1] * 100:.2f}%")
+                st.write(f"**Portfolio Volatility**: {portfolio_volatility2 * 100:.2f}%")
                 vol_table2 = pd.DataFrame({
                     "Ticker": data2.columns,
-                    "Volatility (%)": calculate_volatility(data2)[0].values * 100
+                    "Annualized Volatility (%)": ticker_volatility2.values * 100
                 })
                 st.table(vol_table2)
 
