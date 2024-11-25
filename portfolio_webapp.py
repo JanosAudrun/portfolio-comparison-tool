@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.ticker as mtick
 import matplotlib.cm as cm
+import numpy as np
 
 # Set page configuration
 st.set_page_config(layout="wide")
@@ -228,6 +229,59 @@ def plot_ticker_contributions(data, weights):
     plt.tight_layout()
     return fig
 
+# Function to plot portfolio allocation piechart
+def plot_allocation_pie(weights, tickers, title):
+    """
+    Plots a pie chart for portfolio allocations with callout labels and percentages.
+    :param weights: List of portfolio weights.
+    :param tickers: List of portfolio tickers.
+    :param title: Title for the pie chart.
+    """
+    fig, ax = plt.subplots(figsize=(8, 6))
+    
+    wedges, _= ax.pie(
+        weights,
+        labels=None,  # Disable default labels to customize
+        startangle=90,
+        colors=plt.cm.tab10.colors[:len(tickers)],  # Use a color map for distinct colors
+    )
+
+    # Add callouts for labels and percentages
+    for i, p in enumerate(wedges):
+        # Calculate the angle of the slice
+        ang = (p.theta2 - p.theta1) / 2.0 + p.theta1
+        x = np.cos(np.radians(ang))  # X-coordinate for callout
+        y = np.sin(np.radians(ang))  # Y-coordinate for callout
+        
+        connectionstyle = "angle,angleA=0,angleB={}".format(ang)
+
+        # Annotate ticker labels
+        ax.annotate(
+            f"{tickers[i]}",
+            xy=(x * 1.1, y * 1.1),  # Position outside the pie chart
+            xytext=(x * 1.4, y * 1.4),  # Offset for callout text
+            arrowprops=dict(arrowstyle="-", color="white", connectionstyle=connectionstyle),
+            fontsize=12,
+            color="white",
+            ha="center",
+        )
+
+        # Annotate percentages below the labels
+        ax.text(
+            x * 1.4, y * 1.4 - 0.1,  # Slightly below the label
+            f"{weights[i] * 100:.1f}%",  # Format as a percentage
+            fontsize=10,
+            color="white",
+            ha="center",
+        )
+
+    # Set title and background colors
+    ax.set_title(title, fontsize=14, color="#FFFFFF")
+    fig.patch.set_facecolor('#212E31')  # Background around the chart
+    ax.set_facecolor('#212E31')  # Chart background
+    plt.tight_layout()
+    return fig
+
 # Function to plot portfolio drawdowns
 def plot_drawdown(cumulative_returns, portfolio_name):
     drawdown = calculate_drawdown(cumulative_returns)
@@ -313,6 +367,7 @@ if st.sidebar.button("Send it.", key="calculate_button"):
 
             with col1:
                 st.write("## Portfolio 1")
+                st.pyplot(plot_allocation_pie(weights1, data1.columns, "Portfolio 1 Allocation"))
                 st.write("### Drawdown")
                 st.pyplot(plot_drawdown(cumulative_returns1, "Portfolio 1"))
                 st.write("### Contributions")
@@ -329,6 +384,7 @@ if st.sidebar.button("Send it.", key="calculate_button"):
 
             with col2:
                 st.write("## Portfolio 2")
+                st.pyplot(plot_allocation_pie(weights2, data2.columns, "Portfolio 2 Allocation"))
                 st.write("### Drawdown")
                 st.pyplot(plot_drawdown(cumulative_returns2, "Portfolio 2"))
                 st.write("### Contributions")
