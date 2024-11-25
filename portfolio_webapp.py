@@ -131,7 +131,7 @@ def calculate_volatility(data, weights=None):
     daily_returns = data.pct_change().dropna()
 
     # Ticker volatilities
-    ticker_volatility = daily_returns.std()
+    ticker_volatility = daily_returns.std() * (252 ** 0.5)
 
     # Portfolio volatility (if weights are provided)
     portfolio_volatility = None
