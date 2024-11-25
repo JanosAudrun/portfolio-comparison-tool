@@ -13,13 +13,16 @@ st.set_page_config(layout="wide")
 st.title("Janko's Quick&Dirty Portfolio Comparison Tool")
 st.sidebar.header("Portfolio Settings")
 
-with st.expander("Description and Instructions", expanded=True):
+# Adjusted section with font size changes
+st.markdown("### Description and Instructions") 
+
+with st.expander("Click to expand"):
 # Create two columns for Introduction and Instructions
     col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("""
-        ### Description
+        #### Description
         This tool provides analysis of two portfolios, including:
 
         - **Cumulative Returns**
@@ -32,7 +35,7 @@ with st.expander("Description and Instructions", expanded=True):
 
     with col2:
         st.markdown("""
-        ### Instructions
+        #### Instructions
         1. Enter tickers and weights for both portfolios in the sidebar.
         2. Choose data frequency: daily, weekly or monthly
         3. Set a date range for analysis.
