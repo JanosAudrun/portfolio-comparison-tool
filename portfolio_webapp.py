@@ -17,6 +17,7 @@ st.sidebar.header("Portfolio Settings")
 # Adjusted section with font size changes
 st.markdown("### Description and Instructions") 
 
+#Description and Instructions Expander
 with st.expander("Click to expand"):
 # Create two columns for Introduction and Instructions
     col1, col2 = st.columns(2)
@@ -118,6 +119,28 @@ def fetch_data(tickers, start_date, end_date, frequency):
         st.error(f"Error fetching data: {e}")
         return None
 
+def calculate_portfolio_metrics(data, weights):
+    """
+    Calculate individual returns, cumulative returns, and contributions for a portfolio.
+    :param data: DataFrame of adjusted close prices.
+    :param weights: List of portfolio weights.
+    :return: DataFrame with calculated metrics.
+    """
+    metrics = pd.DataFrame(index=data.index)
+    daily_returns = data.pct_change().fillna(0)  # Daily returns
+
+    # Calculate individual and portfolio cumulative returns
+    metrics["Portfolio Return"] = daily_returns.dot(weights)
+    metrics["Portfolio Cumulative Return"] = (1 + metrics["Portfolio Return"]).cumprod() - 1
+
+    for i, ticker in enumerate(data.columns):
+        metrics[f"{ticker} Return"] = daily_returns[ticker]
+        metrics[f"{ticker} Cumulative Return"] = (1 + daily_returns[ticker]).cumprod() - 1
+        metrics[f"{ticker} Contribution"] = metrics[f"{ticker} Return"] * weights[i]
+        metrics[f"{ticker} Cumulative Contribution"] = (1 + metrics[f"{ticker} Contribution"]).cumprod() - 1
+
+    return metrics
+
 # Calculate portfolio returns
 def calculate_portfolio(data, weights):
     # Ensure weights align with columns in data
@@ -127,14 +150,18 @@ def calculate_portfolio(data, weights):
     cumulative_returns = (1 + portfolio_returns).cumprod() - 1
     return portfolio_returns, cumulative_returns
 
-# Calculate portfolio drawdowns
-def calculate_drawdown(cumulative_returns):
-    # Ensure the input cumulative returns start at 0% and not 1.0
-    if cumulative_returns.iloc[0] != 0:
-        cumulative_returns -= cumulative_returns.iloc[0]
+# Calculate portfolio drawdowns using metrics DataFrame
+def calculate_drawdown(metrics, portfolio_column):
+    """
+    Calculate drawdown for a portfolio.
+    :param metrics: DataFrame containing cumulative portfolio returns.
+    :param portfolio_column: Name of the column with portfolio cumulative returns.
+    :return: Series with drawdown values.
+    """
+    cumulative_returns = metrics[portfolio_column]
 
     peak = cumulative_returns.cummax()  # Identify peaks
-    drawdown = (cumulative_returns - peak) # Calculate drawdown
+    drawdown = cumulative_returns - peak  # Calculate drawdown
     return drawdown
 
 # Calculate volatility with dynamic frequency adjustment
@@ -162,30 +189,51 @@ def calculate_volatility(data, weights=None, frequency="Daily"):
 
     return ticker_volatility, portfolio_volatility
 
-# Function to plot individual ticker cumulative returns with distinct colors
-def plot_ticker_cumulative_returns(data, color_map):
+# Refactored function to plot individual ticker cumulative returns using precomputed metrics
+def plot_ticker_cumulative_returns(metrics, color_map, title):
+    """
+    Plot cumulative returns for each ticker using precomputed metrics.
+
+    :param metrics: DataFrame containing precomputed metrics, including cumulative returns.
+    :param color_map: Dictionary mapping tickers to their colors.
+    :param title: Title for the chart.
+    """
     fig, ax = plt.subplots(figsize=(16, 10))  # Larger chart size
     fig.patch.set_facecolor('#212E31')  # Background around chart
     ax.set_facecolor('#212E31')  # Chart background
 
-    for ticker in data.columns:
-        cumulative_returns = (1 + data[ticker].pct_change().fillna(0)).cumprod() - 1
-        ax.plot(data.index, cumulative_returns, 
-                label=f'{ticker} Cumulative Return', 
-                linestyle='-', 
-                color=color_map[ticker])  # Use color from unified color_map
+    # Filter columns for cumulative returns excluding the portfolio
+    cumulative_return_cols = [
+        col for col in metrics.columns if "Cumulative Return" in col and "Portfolio" not in col
+    ]
 
-    ax.set_xlim(left=data.index.min())  # Ensure the first point starts at the Y axis
+    for col in cumulative_return_cols:
+        ticker = col.split()[0]  # Extract the ticker name
+        ax.plot(
+            metrics.index,
+            metrics[col],
+            label=f"{ticker} Cumulative Return",
+            linestyle='-',
+            color=color_map.get(ticker, "#FFFFFF")  # Use color from unified color_map or default to white
+        )
+
+    # Set axis labels, title, and format ticks
+    ax.set_xlim(left=metrics.index.min())  # Ensure the first point starts at the Y axis
     ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=[1, 4, 7, 10]))  # Quarterly ticks
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))  # Date format
 
-    # Set labels, title, and increase font sizes
     ax.set_xlabel('Date', color='#FFFFFF', fontsize=16)
     ax.set_ylabel('Cumulative Return', color='#FFFFFF', fontsize=16)
-    ax.set_title('Individual Ticker Cumulative Returns', color='#FFFFFF', fontsize=20)
+    ax.set_title(title, color='#FFFFFF', fontsize=20)
     ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0))  # Convert to percentage
     ax.tick_params(axis='both', colors='#FFFFFF', labelsize=14)  # Increase tick font size
-    ax.legend(facecolor='#212E31', edgecolor='#FFFFFF', framealpha=0.5, labelcolor='#FFFFFF', fontsize=14)  # Larger legend text
+    ax.legend(
+        facecolor='#212E31',
+        edgecolor='#FFFFFF',
+        framealpha=0.5,
+        labelcolor='#FFFFFF',
+        fontsize=14
+    )  # Larger legend text
     ax.spines['top'].set_color('#FFFFFF')
     ax.spines['bottom'].set_color('#FFFFFF')
     ax.spines['left'].set_color('#FFFFFF')
@@ -194,33 +242,51 @@ def plot_ticker_cumulative_returns(data, color_map):
     plt.tight_layout()
     return fig
 
-# Function to plot individual ticker contributions to the portfolio
-def plot_ticker_contributions(data, weights, color_map):
+# Refactored function to plot individual ticker contributions using precomputed metrics
+def plot_ticker_contributions(metrics, color_map, title):
+    """
+    Plot cumulative contributions for each ticker using precomputed metrics.
+
+    :param metrics: DataFrame containing precomputed metrics, including cumulative contributions.
+    :param color_map: Dictionary mapping tickers to their colors.
+    :param title: Title for the chart.
+    """
     fig, ax = plt.subplots(figsize=(16, 10))  # Larger chart size
     fig.patch.set_facecolor('#212E31')  # Background around chart
     ax.set_facecolor('#212E31')  # Chart background
 
-    for ticker in data.columns:
-        # Calculate weighted daily contributions
-        daily_contribution = data[ticker].pct_change().fillna(0) * weights[data.columns.get_loc(ticker)]
-        cumulative_contribution = (1 + daily_contribution).cumprod() - 1  # Cumulative contributions
+    # Filter columns for cumulative contributions
+    contribution_cols = [
+        col for col in metrics.columns if "Cumulative Contribution" in col
+    ]
 
-        ax.plot(data.index, cumulative_contribution, 
-                label=f'{ticker} Contribution', 
-                linestyle='-', 
-                color=color_map[ticker])  # Use color from unified color_map
+    for col in contribution_cols:
+        ticker = col.split()[0]  # Extract the ticker name
+        ax.plot(
+            metrics.index,
+            metrics[col],
+            label=f"{ticker} Contribution",
+            linestyle='-',
+            color=color_map.get(ticker, "#FFFFFF")  # Use color from unified color_map or default to white
+        )
 
-    ax.set_xlim(left=data.index.min())  # Ensure the first point starts at the Y axis
+    # Set axis labels, title, and format ticks
+    ax.set_xlim(left=metrics.index.min())  # Ensure the first point starts at the Y axis
     ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=[1, 4, 7, 10]))  # Quarterly ticks
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))  # Date format
 
-    # Set labels, title, and increase font sizes
     ax.set_xlabel('Date', color='#FFFFFF', fontsize=16)
     ax.set_ylabel('Cumulative Contribution', color='#FFFFFF', fontsize=16)
-    ax.set_title('Individual Ticker Contributions to Portfolio', color='#FFFFFF', fontsize=20)
+    ax.set_title(title, color='#FFFFFF', fontsize=20)
     ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0))  # Convert to percentage
     ax.tick_params(axis='both', colors='#FFFFFF', labelsize=14)  # Increase tick font size
-    ax.legend(facecolor='#212E31', edgecolor='#FFFFFF', framealpha=0.5, labelcolor='#FFFFFF', fontsize=14)
+    ax.legend(
+        facecolor='#212E31',
+        edgecolor='#FFFFFF',
+        framealpha=0.5,
+        labelcolor='#FFFFFF',
+        fontsize=14
+    )  # Larger legend text
     ax.spines['top'].set_color('#FFFFFF')
     ax.spines['bottom'].set_color('#FFFFFF')
     ax.spines['left'].set_color('#FFFFFF')
@@ -286,9 +352,15 @@ def plot_allocation_pie(weights, tickers, title, color_map):
     plt.tight_layout()
     return fig
 
-# Function to plot portfolio drawdowns
-def plot_drawdown(cumulative_returns, portfolio_name):
-    drawdown = calculate_drawdown(cumulative_returns)
+# Plot portfolio drawdowns using precomputed metrics
+def plot_drawdown(metrics, portfolio_column, portfolio_name):
+    """
+    Plot drawdown for a portfolio using precomputed metrics.
+    :param metrics: DataFrame containing cumulative portfolio returns.
+    :param portfolio_column: Name of the column with portfolio cumulative returns.
+    :param portfolio_name: Name of the portfolio (for chart title/labels).
+    """
+    drawdown = calculate_drawdown(metrics, portfolio_column)
     
     # Plot the drawdown
     fig, ax = plt.subplots(figsize=(16, 6))  # Adjust size for drawdown graph
@@ -317,7 +389,7 @@ def plot_drawdown(cumulative_returns, portfolio_name):
     plt.tight_layout()
     return fig
 
-# If Calculate is clicked
+# Main function
 if st.sidebar.button("Send it.", key="calculate_button"):
     # Step 1: Fetch data for the portfolios
     data1 = fetch_data(tickers1, start_date, end_date, frequency)
@@ -340,9 +412,9 @@ if st.sidebar.button("Send it.", key="calculate_button"):
 
         # Step 3: Proceed if both weights are valid
         if weights1 and weights2:
-            # Step 4: Calculate portfolio returns
-            portfolio1_returns, cumulative_returns1 = calculate_portfolio(data1, weights1)
-            portfolio2_returns, cumulative_returns2 = calculate_portfolio(data2, weights2)
+            # Step 4: Calculate metrics for both portfolios
+            metrics1 = calculate_portfolio_metrics(data1, weights1)
+            metrics2 = calculate_portfolio_metrics(data2, weights2)
 
             # Calculate volatilities for Portfolio 1 and Portfolio 2
             ticker_volatility1, portfolio_volatility1 = calculate_volatility(data1, weights1, frequency)
@@ -353,22 +425,41 @@ if st.sidebar.button("Send it.", key="calculate_button"):
             fig, ax = plt.subplots(figsize=(16, 8))  # Adjusted size for main chart
             fig.patch.set_facecolor('#212E31')
             ax.set_facecolor('#212E31')
-            ax.plot(cumulative_returns1.index, cumulative_returns1, label="Portfolio 1", linestyle='-', color='#EDEA99')
-            ax.plot(cumulative_returns2.index, cumulative_returns2, label="Portfolio 2", linestyle='-', color='#96CFD8')
-            ax.set_xlim(left=cumulative_returns1.index.min())
-            ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=[1, 4, 7, 10]))
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+
+            # Plot cumulative returns for both portfolios
+            ax.plot(
+                metrics1.index,
+                metrics1["Portfolio Cumulative Return"],
+                label="Portfolio 1",
+                linestyle='-',
+                color='#EDEA99'
+            )
+            ax.plot(
+                metrics2.index,
+                metrics2["Portfolio Cumulative Return"],
+                label="Portfolio 2",
+                linestyle='-',
+                color='#96CFD8'
+            )
+
+            # Customize the chart
+            ax.set_xlim(left=metrics1.index.min())  # Ensure the first point starts at the Y axis
+            ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=[1, 4, 7, 10]))  # Quarterly ticks
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))  # Date format
             ax.set_xlabel('Date', color='#FFFFFF', fontsize=16)
             ax.set_ylabel('Cumulative Return', color='#FFFFFF', fontsize=16)
             ax.set_title(f'Cumulative Returns {frequency} Data, ({start_date} to {end_date})', color='#FFFFFF', fontsize=20)
-            ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0))
+            ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0))  # Format as percentage
             ax.tick_params(axis='both', colors='#FFFFFF', labelsize=14)
             ax.legend(facecolor='#212E31', edgecolor='#FFFFFF', framealpha=0.5, labelcolor='#FFFFFF', fontsize=14)
+
+            # Style the plot spines and grid
             ax.spines['top'].set_color('#FFFFFF')
             ax.spines['bottom'].set_color('#FFFFFF')
             ax.spines['left'].set_color('#FFFFFF')
             ax.spines['right'].set_color('#FFFFFF')
-            ax.grid(True, color='#FFFFFF', alpha=0.3)
+            ax.grid(True, color='#FFFFFF', alpha=0.3)  # Light grid
+
             plt.tight_layout()
             st.pyplot(fig)
 
@@ -379,11 +470,11 @@ if st.sidebar.button("Send it.", key="calculate_button"):
                 st.write("#### Portfolio 1")
                 st.pyplot(plot_allocation_pie(weights1, data1.columns, "Portfolio 1 Allocation", color_map))
                 st.write("##### Drawdown")
-                st.pyplot(plot_drawdown(cumulative_returns1, "Portfolio 1"))
+                st.pyplot(plot_drawdown(metrics1, "Portfolio Cumulative Return", "Portfolio 1"))
                 st.write("##### Contributions")
-                st.pyplot(plot_ticker_contributions(data1, weights1, color_map))
+                st.pyplot(plot_ticker_contributions(metrics1, color_map, "Portfolio 1: Contributions"))
                 st.write("##### Cumulative Returns")
-                st.pyplot(plot_ticker_cumulative_returns(data1, color_map))
+                st.pyplot(plot_ticker_cumulative_returns(metrics1, color_map, "Portfolio 1: Cumulative Returns"))
                 st.write("##### Volatility")
                 st.write(f"**Portfolio Volatility**: {portfolio_volatility1 * 100:.2f}%")
                 vol_table1 = pd.DataFrame({
@@ -396,11 +487,11 @@ if st.sidebar.button("Send it.", key="calculate_button"):
                 st.write("#### Portfolio 2")
                 st.pyplot(plot_allocation_pie(weights2, data2.columns, "Portfolio 2 Allocation", color_map))
                 st.write("##### Drawdown")
-                st.pyplot(plot_drawdown(cumulative_returns2, "Portfolio 2"))
+                st.pyplot(plot_drawdown(metrics2, "Portfolio Cumulative Return", "Portfolio 2"))
                 st.write("##### Contributions")
-                st.pyplot(plot_ticker_contributions(data2, weights2, color_map))
+                st.pyplot(plot_ticker_contributions(metrics2, color_map, "Portfolio 2: Contributions"))
                 st.write("##### Cumulative Returns")
-                st.pyplot(plot_ticker_cumulative_returns(data2, color_map))
+                st.pyplot(plot_ticker_cumulative_returns(metrics2, color_map, "Portfolio 2: Cumulative Returns"))
                 st.write("##### Volatility")
                 st.write(f"**Portfolio Volatility**: {portfolio_volatility2 * 100:.2f}%")
                 vol_table2 = pd.DataFrame({
@@ -409,30 +500,30 @@ if st.sidebar.button("Send it.", key="calculate_button"):
                 })
                 st.table(vol_table2)
 
-            # Step 7: Display the returns table
-            return_table = pd.DataFrame({
-                "Portfolio 1 Return": portfolio1_returns,
-                "Portfolio 2 Return": portfolio2_returns
-            })
-
-            for i, ticker in enumerate(data1.columns):
-                ticker_returns = data1[ticker].pct_change().fillna(0)
-                ticker_daily_contribution = ticker_returns * weights1[i]
-                ticker_cumulative_contribution = (1 + ticker_daily_contribution).cumprod() - 1
-
-                return_table[f"{ticker} Return (P1)"] = ticker_returns
-                return_table[f"{ticker} Cumulative (P1)"] = (1 + ticker_returns).cumprod() - 1
-                return_table[f"{ticker} Contribution (P1)"] = ticker_cumulative_contribution
-
-            for i, ticker in enumerate(data2.columns):
-                ticker_returns = data2[ticker].pct_change().fillna(0)
-                ticker_daily_contribution = ticker_returns * weights2[i]
-                ticker_cumulative_contribution = (1 + ticker_daily_contribution).cumprod() - 1
-
-                return_table[f"{ticker} Return (P2)"] = ticker_returns
-                return_table[f"{ticker} Cumulative (P2)"] = (1 + ticker_returns).cumprod() - 1
-                return_table[f"{ticker} Contribution (P2)"] = ticker_cumulative_contribution
-
+          # Step 7: Display the returns table
             st.write("### Returns Table")
             st.write("Below is a table of returns, cumulative returns, and return contributions. You can download it via the button on the top right of the table (hover)")
+
+            # Extract relevant columns for Portfolio 1
+            returns_table1 = metrics1[[
+                "Portfolio Return",
+                "Portfolio Cumulative Return",
+            ] + [
+                col for col in metrics1.columns if "Return" in col and "Portfolio" not in col
+            ] + [
+                col for col in metrics1.columns if "Contribution" in col and "Portfolio" not in col
+            ]].rename(columns=lambda x: f"{x} (P1)")
+
+            # Extract relevant columns for Portfolio 2
+            returns_table2 = metrics2[[
+                "Portfolio Return",
+                "Portfolio Cumulative Return",
+            ] + [
+                col for col in metrics2.columns if "Return" in col and "Portfolio" not in col
+            ] + [
+                col for col in metrics2.columns if "Contribution" in col and "Portfolio" not in col
+            ]].rename(columns=lambda x: f"{x} (P2)")
+
+            # Combine both tables into one for display
+            return_table = pd.concat([returns_table1, returns_table2], axis=1)
             st.dataframe(return_table)
