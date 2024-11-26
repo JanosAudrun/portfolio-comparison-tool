@@ -32,7 +32,12 @@ with st.expander("Click to expand"):
         - **Ticker Cumulative Returns**
         - **Volatility**
         - **Returns Table**
-        """)
+                    
+        #### Changelog:
+        <a href="http://janko.work/portfolio-comparison/changelog" target="_blank">View Changelog</a>
+        """,
+        unsafe_allow_html=True,
+        )
 
     with col2:
         st.markdown("""
@@ -46,6 +51,7 @@ with st.expander("Click to expand"):
         - Expand each graph by hovering on it and clicking the expand button in the top right.
         - Download the table in CSV format by hovering and clicking the download icon in the top right.
         """)
+       
 
 # Sidebar for Portfolio 1
 st.sidebar.subheader("Portfolio 1")
